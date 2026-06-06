@@ -1,136 +1,65 @@
-# EmotionLens 🎭
+# Real-Time Facial Emotion Recognition
 
-> Real-time facial emotion recognition powered by MediaPipe + EfficientNet
-
-EmotionLens is a production-quality desktop application that captures your webcam feed, detects faces with MediaPipe, and classifies emotions in real time using an EfficientNet-based model from HSEmotion — all on CPU, no GPU required.
+This is a desktop application that performs real-time facial emotion recognition using a webcam feed. It detects faces using MediaPipe, classifies emotions using the HSEmotion deep learning library (EfficientNet-based model), and displays live results through a PyQt6 GUI with per-face annotations and a session analytics panel.
 
 ---
 
-## ✨ Features
+## Prerequisites
 
-| Feature | Detail |
-|---------|--------|
-| 🎥 Live webcam feed | OpenCV capture at 640×480, configurable |
-| 👤 Multi-face support | Tracks and labels up to N faces simultaneously |
-| 🧠 EfficientNet-B0 inference | HSEmotion `enet_b0_8_best_afew`, 7 emotion classes |
-| ⏱ Temporal smoothing | Majority vote + EMA to eliminate prediction flicker |
-| 📊 Live statistics panel | Per-emotion distribution, session time, avg confidence |
-| 🗂 CSV logging | Auto-flushed, auto-rotated prediction log |
-| ⚡ Frame skipping | Configurable skip gate for CPU performance tuning |
-| 🎨 Dark HUD overlay | Colour-coded bounding boxes + mini probability bars |
-
-**Emotions detected:** Angry · Disgust · Fear · Happy · Neutral · Sad · Surprise
+- Python 3.11 (required — Python 3.12+ has dataclass incompatibilities with timm 0.6.13)
+- Git (required to install timm from source)
+- A working webcam
+- Windows 10/11 (tested environment; macOS/Linux should work with minor path differences)
 
 ---
 
-## 🏗 Architecture
+## Setup Instructions
 
-```
-WebcamThread ──► InferenceWorker ──► MainWindow (GUI)
-  (OpenCV)          ├─ FaceDetector (MediaPipe)
-                    ├─ EmotionRecognizer (HSEmotion / EfficientNet)
-                    ├─ SmootherPool (per-face temporal smoothing)
-                    ├─ EmotionLogger (CSV)
-                    └─ Drawing utilities (OpenCV overlays)
-```
-
-All heavy work runs off the GUI thread. Qt signals ensure thread-safe communication.
-
-See [`docs/architecture.md`](docs/architecture.md) for the full diagram and [`docs/methodology.md`](docs/methodology.md) for algorithm details.
-
----
-
-## 📦 Installation
+### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-org/emotionlens.git
-cd emotionlens
-python3.11 -m venv .venv && source .venv/bin/activate
+git clone https://github.com/<your-username>/EmotionLens.git
+cd EmotionLens
+```
+
+### 2. Create and Activate a Virtual Environment
+
+**Windows:**
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+**macOS / Linux:**
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Install Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-See [`docs/installation.md`](docs/installation.md) for full platform-specific instructions.
+> **Note:** `timm` is installed directly from the GitHub source at tag `v0.6.13` rather than PyPI. This is intentional — the PyPI wheel for `timm 0.6.13` is missing the `timm/layers/` subpackage on Windows. The git install builds the wheel locally from source, which includes all files correctly.
 
----
-
-## 🚀 Usage
+### 4. Run the Application
 
 ```bash
-cd src
-python main.py
+python -m src.main
 ```
 
-Click **▶ Start** to open the webcam. The pipeline begins automatically.
-
-### Keyboard shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| Coming soon | — |
-
-### Configuration
-
-All tuneable parameters live in [`src/utils/config.py`](src/utils/config.py):
-
-```python
-CAMERA_WIDTH = 640          # Capture resolution
-CAMERA_HEIGHT = 480
-FACE_CONFIDENCE_THRESHOLD = 0.5   # MediaPipe detection threshold
-SMOOTHING_WINDOW = 10       # Temporal smoothing history size
-FRAME_SKIP = 2              # Run inference every N frames
-HSEMOTION_MODEL = "enet_b0_8_best_afew"
-```
+The GUI will open. The HSEmotion model will be downloaded automatically on first run (~50 MB) and cached in your home directory under `.hsemotion/`. Allow 5–10 seconds for the model to load before the camera feed appears.
 
 ---
 
-## 🧪 Testing
+## What I Learned / Found Challenging
 
-```bash
-pytest tests/ -v
-```
+The most challenging aspect of this project was the `timm` version compatibility chain. The HSEmotion library depends on `timm`, but the PyPI wheel for `timm 0.6.13` is missing the `timm/layers/` subpackage on Windows — meaning `pip show timm` reports the correct version, yet `import timm.layers` fails. This created a confusing situation where standard reinstall commands had no effect.
 
-Tests cover: face detection helpers, temporal smoother, CSV logger, FPS counter, and drawing utilities. No webcam or GPU is required to run the tests.
+The deeper issue was that the saved model `.pt` file was pickled with direct references to internal timm module paths (`timm.layers.conv2d_same`, `timm.models._efficientnet_blocks`) that no longer exist under those names. Python's pickle module tries to resolve these paths at load time and fails with `ModuleNotFoundError` or `AttributeError` depending on what it finds.
 
----
+The solution required two independent fixes: installing `timm` from the GitHub source at the `v0.6.13` tag (bypassing the broken PyPI wheel), and patching `sys.modules` at runtime to register all `timm.models.layers` submodules under their old `timm.layers.*` paths before the model loads.
 
-## 📁 Project Structure
-
-```
-EmotionLens/
-├── src/
-│   ├── main.py                   ← Application entry point
-│   ├── camera/webcam.py          ← OpenCV capture thread
-│   ├── detection/face_detector.py← MediaPipe face detection
-│   ├── emotion/
-│   │   ├── emotion_recognizer.py ← HSEmotion inference wrapper
-│   │   └── smoothing.py          ← Temporal stabilisation
-│   ├── ui/
-│   │   ├── main_window.py        ← PyQt6 main window + inference worker
-│   │   └── widgets.py            ← Reusable custom widgets
-│   ├── logs/emotion_logger.py    ← CSV logging
-│   └── utils/
-│       ├── config.py             ← Centralised configuration
-│       ├── drawing.py            ← OpenCV overlay utilities
-│       └── fps.py                ← Rolling FPS counter
-├── tests/                        ← pytest test suite
-├── docs/                         ← Architecture & methodology docs
-├── data/                         ← emotion_logs.csv (auto-created)
-└── requirements.txt
-```
-
----
-
-## 🔭 Future Improvements
-
-- [ ] Action unit (AU) detection via OpenFace integration
-- [ ] ONNX runtime export for faster CPU inference
-- [ ] Multi-camera source selector in the GUI
-- [ ] Session replay from saved CSV logs
-- [ ] REST API mode for headless server deployment
-- [ ] Attention heatmap visualisation (Grad-CAM)
-
----
-
-## 📄 License
-
-MIT — see [LICENSE](LICENSE).
+This experience reinforced that `pip show` and `import` behaviour can diverge when a package's wheel is partially extracted, and that pickle-serialised PyTorch models carry hard dependencies on the exact internal structure of every library used at training time.
