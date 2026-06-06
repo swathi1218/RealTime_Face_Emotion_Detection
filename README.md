@@ -18,7 +18,7 @@ This is a desktop application that performs real-time facial emotion recognition
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/<your-username>/EmotionLens.git
+git clone https://github.com/swathi1218/EmotionLens.git
 cd EmotionLens
 ```
 
